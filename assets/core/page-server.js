@@ -86,6 +86,7 @@ srv.saveServer = function(){
 	// 	return;
 	// }
 	var data = ko.mapping.toJS(srv.configServer);
+	console.log(data);
 	app.ajaxPost("/server/saveservers", data, function (res) {
 		if (!app.isFine(res)) {
 			return;

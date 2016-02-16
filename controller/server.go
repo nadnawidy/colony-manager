@@ -9,6 +9,8 @@ import (
 	"github.com/eaciit/knot/knot.v1"
 	// . "github.com/eaciit/toolkit"
 	// "strings"
+	. "github.com/eaciit/sshclient"
+
 )
 
 type ServerController struct {
@@ -58,7 +60,7 @@ func (s *ServerController) SaveServers(r *knot.WebContext) interface{} {
 		return helper.CreateResult(false, nil, err.Error())
 	}
 
-	return helper.CreateResult(true, nil, "")
+	return helper.CreateResult(true, data, "")
 }
 
 func (s *ServerController) SelectServers(r *knot.WebContext) interface{} {
@@ -141,4 +143,51 @@ func (s *ServerController) ServersFilter(r *knot.WebContext) interface{} {
 	defer cursor.Close()
 
 	return helper.CreateResult(true, data, "")
+}
+
+
+
+
+func (s *ServerController) SendFile(host string, user string, pass string , filepath string ,destination string , pem string) interface{} {
+	//r.Config.OutputType = knot.OutputJson
+	
+	var SshClient SshSetting
+	SshClient.SSHAuthType = SSHAuthType_Password
+	SshClient.SSHHost = host //"192.168.56.102:22" //r.Request.FormValue("SSHHost")
+	if(pem==""){
+		SshClient.SSHUser = user //"eaciit1" //r.Request.FormValue("SSHUser")
+		SshClient.SSHPassword = pass //"12345" //r.Request.FormValue("SSHPassword")
+	}else{
+		SshClient.SSHKeyLocation = pem
+	}
+	// filepath := "E:\\a.jpg"  //r.Request.FormValue("filepath")
+	// destination := "/home/eaciit1"  //r.Request.FormValue("destination")
+
+	e := SshClient.CopyFileSsh(filepath, destination)
+	if e != nil {
+		return helper.CreateResult(true, e , "")
+	} else {
+		return helper.CreateResult(true, "sukses", "")
+	}
+}
+
+func (s *ServerController) RunCommand(host string, user string, pass string , command string, pem string) interface{} {
+	var SshClient SshSetting
+	SshClient.SSHAuthType = SSHAuthType_Password
+	SshClient.SSHHost = host //"192.168.56.102:22" //r.Request.FormValue("SSHHost")
+	if(pem==""){
+		SshClient.SSHUser = user //"eaciit1" //r.Request.FormValue("SSHUser")
+		SshClient.SSHPassword = pass //"12345" //r.Request.FormValue("SSHPassword")
+	}else{
+		SshClient.SSHKeyLocation = pem
+	}
+
+	ps := []string{}
+	ps=append(ps,command)
+	res, e := SshClient.RunCommandSsh(ps...)
+	if e != nil {
+		return helper.CreateResult(true, e , "")
+	} else {
+		return helper.CreateResult(true, res, "")
+	}
 }
