@@ -29,15 +29,7 @@ dg.scrapperMode = ko.observable('');
 dg.scrapperData = ko.observableArray([]);
 dg.scrapperIntervals = ko.observableArray([]);
 dg.dataSourcesData = ko.observableArray([]);
-
-// Test Data Child
-// dg.dataTestBind = ko.observableArray( [
-// {"Format":"","Label":"Age","Lookup":{"DataSourceID":"","DisplayField":"","IDField":"","LookupFields":[],"_id":""},"Type":"double","_id":"Age"},
-// {"Format":"","Label":"Address","Lookup":{"DataSourceID":"","DisplayField":"","IDField":"","LookupFields":[],"_id":""},"Type":"string","_id":"Address"},
-// {"Format":"","Label":"Job","Lookup":{"DataSourceID":"","DisplayField":"","IDField":"","LookupFields":[],"_id":""},"Type":"string","_id":"Job", "expanded":true, "items":[{"_id":"testA", "Label":"testA", "items":[{"_id":"asa", "Label":"ere"}]}, {"_id":"testB", "Label":"testB"}]},
-// {"Format":"","Label":"email","Lookup":{"DataSourceID":"","DisplayField":"","IDField":"","LookupFields":[],"_id":""},"Type":"string","_id":"email"},
-// {"Format":"","Label":"FullName","Lookup":{"DataSourceID":"","DisplayField":"","IDField":"","LookupFields":[],"_id":""},"Type":"string","_id":"FullName"},
-// {"Format":"","Label":"_id","Lookup":{"DataSourceID":"","DisplayField":"","IDField":"","LookupFields":[],"_id":""},"Type":"string","_id":"_id"}]);
+dg.fieldDataTypes = ko.observableArray(['string', 'double', 'int']);
 
 dg.selectedDataGrabber = ko.observable('');
 dg.tempCheckIdDataGrabber = ko.observableArray([]);
@@ -75,9 +67,30 @@ dg.historyColumns = ko.observableArray([
 		].join(" ");
 	}, filterable: false }
 ]);
+dg.dataSourcesDataForSourceAndDest = function (which) {
+	return ko.computed(function () {
+		return Lazy(dg.dataSourcesData()).filter(function (k) {
+			var where = (which != "origin") ? "DataSourceOrigin" : "DataSourceDestination";
+			return dg.configScrapper[where]() != k._id;
+		}).toArray();
+	}, dg);
+}
 dg.changeDataSourceOrigin = function () {
 	dg.prepareFieldsOrigin(this.value());
 };
+dg.changeDataSourceDestination = function () {
+	var ds = Lazy(dg.dataSourcesData()).find({
+		_id: this.value()
+	});
+
+	$(".table-tree-map").find("select.field-destination").each(function (i, each) {
+		var $comboBox = $(each).data("kendoComboBox");
+		$comboBox.value('');
+		$comboBox.setDataSource(new kendo.data.DataSource({
+			data: ds.MetaData
+		}));
+	});
+}
 dg.fieldOfDataSource = function (which) {
 	return ko.computed(function () {
 		var ds = Lazy(dg.dataSourcesData()).find({
@@ -390,25 +403,111 @@ dg.viewData = function (date) {
 dg.prepareFieldsOrigin = function (_id) {
 	var row = Lazy(dg.dataSourcesData()).find({ _id: _id });
 
-	var ds = new kendo.data.HierarchicalDataSource({
-        data: row.MetaData,
-        schema: {
-            model: {
-                children: "Sub"
-            }
-        }
-    });
+	$(".table-tree-map").replaceWith('<table class="table tree table-tree-map"></table>');
+	var $tree = $(".table-tree-map");
+	var index = 1;
 
-	$(".fields-origin").replaceWith('<div class="fields-origin"></div>');
-    $(".fields-origin").kendoTreeView({
-        dataSource: ds,
-        dataTextField: ["Label"],
-        template: function (d) {
-        	return [
-        		"<div style='width: 200px;'>" + d.item._id + "</div>",
-    		].join("")
-        },
-    });
+	var header = [
+		'<thead>',
+			'<tr>',
+				'<th>&nbsp;</th>',
+				'<th>Field Origin</th>',
+				'<th>Type</th>',
+				'<th>Field Destination</th>',
+				'<th>Type</th>',
+			'</tr>',
+		'</thead>'
+	].join('');
+	$tree.append(header);
+
+	var renderTheMap = function (data, parent, parentData) {
+		data.forEach(function (item) {
+			var currentIndex = index;
+			var dataClass = 'treegrid-' + currentIndex;
+			var dataKey = item._id;
+			var dataType = item.Type;
+			var sign = '&nbsp;';
+
+			if (parent != undefined) {
+				dataClass += ' treegrid-parent-' + parent;
+			}
+			if (parentData != undefined) {
+				dataKey = parentData._id + '|' + dataKey;
+			}
+
+			if (dataType.indexOf('array') > -1) {
+				if (dataType.indexOf('object') > -1) {
+					sign = '[]()';
+				} else {
+					sign = '[]';
+				}
+			} else if (dataType.indexOf('object') > -1) {
+				sign = '()';
+			}
+
+			var content = [
+				'<tr class="' + dataClass + '" data-key="' + dataKey + '" data-type="' + dataType + '">',
+					'<td style="width: 60px; font-weight: bold;">' + sign + '</td>',
+					'<td>' + item._id + '</td>',
+					'<td><select class="type-origin" data-value="' + item.Type + '"></select></td>',
+					'<td><select class="field-destination"></select></td>',
+					'<td><select class="type-destination"></select></td>',
+				'</tr>'
+			].join("");
+
+			$tree.append(content);
+			index++;
+
+			var $row = $tree.find("tr:last");
+			var $typeOrigin = $row.find("select.type-origin");
+
+			if (["array-objects", "array", "object"].indexOf($row.attr("data-type")) > -1) {
+				$typeOrigin.closest('td').html($typeOrigin.attr("data-value"));
+			} else {
+				if ($row.attr("data-type").indexOf('array') > -1) {
+					$typeOrigin.closest('td').html($typeOrigin.attr("data-value"));
+				} else {
+					$typeOrigin.kendoDropDownList({
+						dataSource: {
+							data: dg.fieldDataTypes()
+						},
+						value: $typeOrigin.attr("data-value"),
+					});
+				}
+			}
+
+			$row.find("select.field-destination").kendoComboBox({ 
+				dataSource: {
+					data: dg.fieldOfDataSource('destination')()
+				},
+				dataValueField: '_id', 
+				dataTextField: 'Label', 
+				placeholder: 'Select one', 
+				filter: 'contains', 
+				suggest: true, 
+				minLength: 2
+			});
+
+			var $typeDestination = $row.find("select.type-destination");
+			$typeDestination.kendoDropDownList({
+				dataSource: {
+					data: dg.fieldDataTypes()
+				}
+			});
+
+			if (item.Sub != undefined && item.Sub != null) {
+				renderTheMap(item.Sub, currentIndex, item);
+			}
+		});
+	};
+
+	renderTheMap(row.MetaData);
+
+	$tree.treegrid({
+		expanderExpandedClass: 'glyphicon glyphicon-minus',
+		expanderCollapsedClass: 'glyphicon glyphicon-plus',
+		initialState: 'collapsed'
+	});
 };
 dg.checkDeleteDataGrabber = function(elem, e){
 	if (e === 'datagrabberall'){
@@ -434,17 +533,6 @@ dg.checkDeleteDataGrabber = function(elem, e){
 	}
 }
 
-function filterDataGrabber(event) {
-	app.ajaxPost("/datagrabber/finddatagrabber", {inputText : dg.valDataGrabberFilter()}, function (res) {
-		if (!app.isFine(res)) {
-			return;
-		}
-		if (!res.data) {
-			res.data = [];
-		}
-		dg.scrapperData(res.data);
-	});
-}
 $(function () {
 	dg.getScrapperData();
 	dg.getDataSourceData();
